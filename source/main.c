@@ -3,6 +3,7 @@
  * Learning xbox 360 homebrew dev in c 
  * By Nicholas Blackburn & docker!
  */
+ #include <byteswap.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,12 +58,14 @@ static volatile int thread_terminate = 0;
 static void inline play_buffer(void)
 {
 
-   while (xenon_sound_get_unplayed() > MAX_UNPLAYED);
-
-   int i;
-   for (i = 0; i < buffer_size / 4; ++i)
-     
-   //printf("%8d %8d\n",xenon_sound_get_free(),xenon_sound_get_unplayed());
+  if(true){
+		while(xenon_sound_get_unplayed()>MAX_UNPLAYED);
+	}
+	
+	int i;
+	for(i=0;i<buffer_size/4;++i) ((int*)buffer)[i]=bswap_32(((int*)buffer)[i]);
+	
+	//printf("%8d %8d\n",xenon_sound_get_free()
    xenon_sound_submit(buffer, buffer_size);
 }
 
