@@ -57,11 +57,6 @@ static volatile int thread_terminate = 0;
 
 static void inline play_buffer(void)
 {
-
-  if(true){
-		while(xenon_sound_get_unplayed()>MAX_UNPLAYED);
-	}
-	
 	int i;
 	for(i=0;i<buffer_size/4;++i) ((int*)buffer)[i]=bswap_32(((int*)buffer)[i]);
 	
@@ -229,9 +224,14 @@ int main()
    printf("\n");
    printf(" press x to close program\n");
    printf("\n");
-   printf(" press y to play sound!\n");
+   printf(" press y to play sound! (Does not work!!)\n");
    printf("\n");
-
+   printf(" press back to go to main menu\n");
+   printf("\n");
+   printf(" press start to crash xbox!\n");
+   printf("\n");
+   printf(" press dpad to switch text colors to red,green,blue, yellow\n");
+   printf("\n");
    unsigned int audiobuf[32];
    uint8_t buf[16];
    float CPU_TMP = 0, GPU_TMP = 0, MEM_TMP = 0, MOBO_TMP = 0;
@@ -288,7 +288,7 @@ int main()
          else if ((c.back)&&(!oldc.back))
          {
             console_clrscr();
-            printf("Going to play music!\n");
+            printf("goes back to main\n");
             main();
          }
 
