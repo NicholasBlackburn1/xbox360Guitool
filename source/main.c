@@ -79,7 +79,7 @@ int main()
    printf("\n");
    printf("press a to See temp\n");
    printf("\n");
-   printf("press b to Get FUSE DATA!\n");
+   printf("press b IS UNUSED RN\n");
    printf("\n");
    printf(" press x to close program\n");
    printf("\n");
@@ -101,7 +101,6 @@ int main()
    struct controller_data_s oldc;
    FILE *audio;
 
-   audio = fopen("sda:/test.raw", "wb");
 
    while (1)
    {
@@ -127,7 +126,7 @@ int main()
          else if ((c.b) && (!oldc.b))
          {
             printf("\n");
-            printf("Print dvd key and cpu key! \n");
+            printf("DOes nothing rn \n");
          }
 
          else if ((c.x) && (!oldc.x))
