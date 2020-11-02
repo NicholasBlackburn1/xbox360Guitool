@@ -135,6 +135,8 @@ int main()
          }
          else if ((c.y) && (!oldc.y))
          {
+         
+
          }
 
          else if ((c.start) && (!oldc.start))

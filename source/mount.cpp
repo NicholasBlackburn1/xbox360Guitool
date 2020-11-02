@@ -1,134 +1,21 @@
-/**
- * ExtFs and ntfs are buggy need to look at more
- * ATA Dma error ? alignement ?
- **/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <debug.h>
 #include <libfat/fat.h>
 #include <libext2/ext2.h>
 #include <libntfs/ntfs.h>
+#include <libxtaf/xtaf.h>
+#include <iso9660/iso9660.h>
 #include <sys/iosupport.h>
 #include <diskio/disc_io.h>
 #include <byteswap.h>
-#include <iso9660/iso9660.h>
+#include "mount.h"
+//#include "../mplayer/mplayerlib.h"
 
 extern DISC_INTERFACE xenon_atapi_ops;
 extern DISC_INTERFACE xenon_ata_ops;
-extern DISC_INTERFACE usb2mass_ops_0;
-extern DISC_INTERFACE usb2mass_ops_1;
-extern DISC_INTERFACE usb2mass_ops_2;
-
-#define le32_to_cpu(x) bswap_32(x)
-
-#define BYTES_PER_SECTOR 4096
-#define NTFS_OEM_ID                         (0x4e54465320202020ULL)
-
-#define PARTITION_TYPE_EMPTY                0x00 /* Empty */
-#define PARTITION_TYPE_DOS33_EXTENDED       0x05 /* DOS 3.3+ extended partition */
-#define PARTITION_TYPE_NTFS                 0x07 /* Windows NT NTFS */
-#define PARTITION_TYPE_WIN95_EXTENDED       0x0F /* Windows 95 extended partition */
-#define PARTITION_TYPE_LINUX                0x83 /* EXT2/3/4 */
-
-#define PARTITION_STATUS_NONBOOTABLE        0x00 /* Non-bootable */
-#define PARTITION_STATUS_BOOTABLE           0x80 /* Bootable (active) */
-
-#define MBR_SIGNATURE                       (0x55AA)
-#define EBR_SIGNATURE                       (0x55AA)
-
-#define BPB_FAT16_fileSysType  0x36
-#define BPB_FAT32_fileSysType  0x52
-
-#define T_FAT           1
-#define T_NTFS          2
-#define T_EXT2          3
-#define T_ISO9660       4
-
-static const char FAT_SIG[3] = {'F', 'A', 'T'};
-
-/**
- * PRIMARY_PARTITION - Block device partition record
- */
-typedef struct _PARTITION_RECORD {
-	u8 status; /* Partition status; see above */
-	u8 chs_start[3]; /* Cylinder-head-sector address to first block of partition */
-	u8 type; /* Partition type; see above */
-	u8 chs_end[3]; /* Cylinder-head-sector address to last block of partition */
-	u32 lba_start; /* Local block address to first sector of partition */
-	u32 block_count; /* Number of blocks in partition */
-} __attribute__((__packed__)) PARTITION_RECORD;
-
-/**
- * MASTER_BOOT_RECORD - Block device master boot record
- */
-typedef struct _MASTER_BOOT_RECORD {
-	u8 code_area[446]; /* Code area; normally empty */
-	PARTITION_RECORD partitions[4]; /* 4 primary partitions */
-	u16 signature; /* MBR signature; 0xAA55 */
-} __attribute__((__packed__)) MASTER_BOOT_RECORD;
-
-/**
- * struct BIOS_PARAMETER_BLOCK - BIOS parameter block (bpb) structure.
- */
-typedef struct {
-	u16 bytes_per_sector; /* Size of a sector in bytes. */
-	u8 sectors_per_cluster; /* Size of a cluster in sectors. */
-	u16 reserved_sectors; /* zero */
-	u8 fats; /* zero */
-	u16 root_entries; /* zero */
-	u16 sectors; /* zero */
-	u8 media_type; /* 0xf8 = hard disk */
-	u16 sectors_per_fat; /* zero */
-	u16 sectors_per_track; /* Required to boot Windows. */
-	u16 heads; /* Required to boot Windows. */
-	u32 hidden_sectors; /* Offset to the start of the partition */
-	u32 large_sectors; /* zero */
-} __attribute__((__packed__)) BIOS_PARAMETER_BLOCK;
-
-/**
- * struct NTFS_BOOT_SECTOR - NTFS boot sector structure.
- */
-typedef struct {
-	u8 jump[3]; /* Irrelevant (jump to boot up code).*/
-	u64 oem_id; /* Magic "NTFS    ". */
-	BIOS_PARAMETER_BLOCK bpb; /* See BIOS_PARAMETER_BLOCK. */
-	u8 physical_drive; /* 0x00 floppy, 0x80 hard disk */
-	u8 current_head; /* zero */
-	u8 extended_boot_signature; /* 0x80 */
-	u8 reserved2; /* zero */
-	s64 number_of_sectors; /* Number of sectors in volume. */
-	s64 mft_lcn; /* Cluster location of mft data. */
-	s64 mftmirr_lcn; /* Cluster location of copy of mft. */
-	s8 clusters_per_mft_record; /* Mft record size in clusters. */
-	u8 reserved0[3]; /* zero */
-	s8 clusters_per_index_record; /* Index block size in clusters. */
-	u8 reserved1[3]; /* zero */
-	u64 volume_serial_number; /* Irrelevant (serial number). */
-	u32 checksum; /* Boot sector checksum. */
-	u8 bootstrap[426]; /* Irrelevant (boot up code). */
-	u16 end_of_sector_marker; /* End of bootsector magic. */
-} __attribute__((__packed__)) NTFS_BOOT_SECTOR;
-
-/**
- * EXTENDED_PARTITION - Block device extended boot record
- */
-typedef struct _EXTENDED_BOOT_RECORD {
-	u8 code_area[446]; /* Code area; normally empty */
-	PARTITION_RECORD partition; /* Primary partition */
-	PARTITION_RECORD next_ebr; /* Next extended boot record in the chain */
-	u8 reserved[32]; /* Normally empty */
-	u16 signature; /* EBR signature; 0xAA55 */
-} __attribute__((__packed__)) EXTENDED_BOOT_RECORD;
-
-#define MAX_DEVICES 10
-
-typedef struct {
-	char name[50];
-	char mount[10];
-	int type;
-	DISC_INTERFACE* interface;
-	sec_t sector;
-} DEVICE_STRUCT;
+extern DISC_INTERFACE usb2mass_ops;
 
 //#define DEBUG_MOUNTALL
 
@@ -139,15 +26,11 @@ typedef struct {
 #define debug_printf(fmt, args...)
 #endif
 
-enum {
-	DEVICE_USB_0, // usb
-	DEVICE_USB_1, // usb
-	DEVICE_USB_2, // usb
-	DEVICE_ATA, // hdd
-	DEVICE_ATAPI, // cdrom
-};
+char * root_dev = NULL;
+static int device_list_size = 0;
+static char device_list[STD_MAX][10];
 
-static char *prefix[] = {"uda", "udb", "udc", "sda", "dvd"};
+static char *prefix[] = {"uda", "sda", "dvd"};
 
 DEVICE_STRUCT part[2][MAX_DEVICES];
 
@@ -160,28 +43,13 @@ static void AddPartition(sec_t sector, int device, int type, int *devnum) {
 	for (i = 0; i < *devnum; i++)
 		if (part[device][i].sector == sector) return; // to avoid mount same partition again
 
-	DISC_INTERFACE *disc = NULL;
+	DISC_INTERFACE *disc = (DISC_INTERFACE *) & xenon_ata_ops;
 
-	switch(device)
-	{
-		case DEVICE_USB_0:
-		disc = (DISC_INTERFACE *) & usb2mass_ops_0;
-		break;		
-		case DEVICE_USB_1:
-		disc = (DISC_INTERFACE *) & usb2mass_ops_1;
-		break;		
-		case DEVICE_USB_2:
-		disc = (DISC_INTERFACE *) & usb2mass_ops_2;
-		break;		
-		case DEVICE_ATA:
-		disc = (DISC_INTERFACE *) & xenon_ata_ops;
-		break;		
-		case DEVICE_ATAPI:
+	if (device == DEVICE_USB)
+		disc = (DISC_INTERFACE *) & usb2mass_ops;
+	
+	else if(device == DEVICE_ATAPI)
 		disc = (DISC_INTERFACE *) & xenon_atapi_ops;
-		break;
-		default:
-		return;	
-	}
 
 	char mount[10];
 	sprintf(mount, "%s%i", prefix[device], *devnum);
@@ -255,25 +123,16 @@ static int FindPartitions(int device) {
 
 	DISC_INTERFACE *interface;
 
-	switch(device)
-	{
-		case DEVICE_USB_0:
-		interface = (DISC_INTERFACE *) & usb2mass_ops_0;
-		break;		
-		case DEVICE_USB_1:
-		interface = (DISC_INTERFACE *) & usb2mass_ops_1;
-		break;		
-		case DEVICE_USB_2:
-		interface = (DISC_INTERFACE *) & usb2mass_ops_2;
-		break;		
-		case DEVICE_ATA:
-		interface = (DISC_INTERFACE *) & xenon_ata_ops;
-		break;		
+	switch(device){
 		case DEVICE_ATAPI:
-		interface = (DISC_INTERFACE *) & xenon_atapi_ops;
-		break;
-		default:
-		return -1;	
+			interface = (DISC_INTERFACE *) & xenon_atapi_ops;
+			break;
+		case DEVICE_ATA:
+			interface = (DISC_INTERFACE *) & xenon_ata_ops;
+			break;
+		case DEVICE_USB:
+			interface = (DISC_INTERFACE *) & usb2mass_ops;
+			break;
 	}
 
 
@@ -310,8 +169,6 @@ static int FindPartitions(int device) {
 		for (i = 0; i < 4; i++) {
 			partition = &mbr.partitions[i];
 			part_lba = le32_to_cpu(mbr.partitions[i].lba_start);
-			if (part_lba > interface->sectors())
-				continue;
 
 			debug_printf(
 					"Partition %i: %s, sector %u, type 0x%x\n",
@@ -504,57 +361,46 @@ static void UnmountPartitions(int device) {
 	}
 }
 
-
-extern int XTAFMount();
-
-/* void sleep(int i) {
-	delay(i);
-}
-*/
-//
 /**
  * Parse mbr for filesystem
  */
-
-int hdd_dvd_mounted = 0; //Prevent mounting the DVD and HDD again...
-extern void (*mount_usb_device)(int device);
-
-void mount_usb(int device)
-{
-	switch (device)
-	{
-		case 0:
-			FindPartitions(DEVICE_USB_0);
-			break;
-		case 1:
-			FindPartitions(DEVICE_USB_1);
-			break;
-		case 2:
-			FindPartitions(DEVICE_USB_2);
-			break;
-		default:
-			printf(" ! Mount USB: Unkown USB device... %d\n", device);
-			break;
+void mount_all_devices() {
+	FindPartitions(DEVICE_USB);
+	if (xenon_ata_ops.isInserted()) {
+		XTAFMount();
+		FindPartitions(DEVICE_ATA);
+	}
+	if (xenon_atapi_ops.isInserted()) {
+		FindPartitions(DEVICE_ATAPI);
 	}
 }
 
-void mount_all_devices() {
-	FindPartitions(DEVICE_USB_0);
-	FindPartitions(DEVICE_USB_1);
-	FindPartitions(DEVICE_USB_2);
-	mount_usb_device = mount_usb;
-
-	if (hdd_dvd_mounted == 0) //Prevent mounting the DVD and HDD again...
-	{
-		if (xenon_atapi_ops.isInserted()) {
-			FindPartitions(DEVICE_ATAPI);
+void findDevices() {
+	for (int i = 3; i < STD_MAX; i++) {
+		if (devoptab_list[i]->structSize) {
+			//strcpy(device_list[device_list_size],devoptab_list[i]->name);
+			sprintf(device_list[device_list_size], "%s:/", devoptab_list[i]->name);
+			printf("findDevices : %s\r\n", device_list[device_list_size]);
+			device_list_size++;
 		}
-
-		if (xenon_ata_ops.isInserted()) {
-			if (XTAFMount() == 0) {
-				FindPartitions(DEVICE_ATA);
-			}
-		}
-		hdd_dvd_mounted = 1; //Prevent mounting the DVD and HDD again...
 	}
+
+	root_dev = device_list[0];
+}
+
+int get_devices(int j, char * m) {
+	int i;
+	for (i = 3 + j; i < STD_MAX; i++) {
+		if (devoptab_list[i]->structSize) {
+			sprintf(m, "%s:/", devoptab_list[i]->name);
+			printf("found\n");
+			break;
+		}
+	}
+	i++;
+	if (i >= STD_MAX) {
+		sprintf(m, "%s:/", devoptab_list[3]->name);
+		i = 4;
+	}
+	return i - 3;
 }
