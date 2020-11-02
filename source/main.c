@@ -57,7 +57,8 @@ static volatile int thread_terminate = 0;
 
 
 static void extrnal_Storage_Setup(){
-   printf("Found Useable"+findDevices()+"Devices"));
+   int device_list_size = findDevices();
+   printf("Found Devices!\n",device_list_size);
    printf("Mouting Devices!\n");
    mount_all_devices();
 }
