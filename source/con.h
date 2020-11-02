@@ -46,14 +46,6 @@ void dumpana()
 char FUSES[350]; /* this string stores the ascii dump of the fuses */
 
 unsigned char stacks[6][0x10000];
-
-void reset_timebase_task()
-{
-   mtspr(284, 0); // TBLW
-   mtspr(285, 0); // TBUW
-   mtspr(284, 0);
-}
-
 void DumpFuses()
 {
    printf(" * FUSES - write them down and keep them safe:\n");
@@ -75,24 +67,6 @@ void DumpFuses()
    network_print_config();
 }
 
-void synchronize_timebases()
-{
-   xenon_thread_startup();
-
-   std((void *)0x200611a0, 0); // stop timebase
-
-   int i;
-   for (i = 1; i < 6; ++i)
-   {
-      xenon_run_thread_task(i, &stacks[i][0xff00], (void *)reset_timebase_task);
-      while (xenon_is_thread_task_running(i))
-         ;
-   }
-
-   reset_timebase_task(); // don't forget thread 0
-
-   std((void *)0x200611a0, 0x1ff); // restart timebase
-}
 
 static void extrnal_Storage_Setup()
 {

@@ -41,6 +41,7 @@ static unsigned int freq;
 static unsigned int real_freq;
 static double freq_ratio;
 static int is_60Hz;
+
 // NOTE: 32khz actually uses ~2136 bytes/frame @ 60hz
 static enum { BUFFER_SIZE_32_60 = 2112,
               BUFFER_SIZE_48_60 = 3200,
@@ -68,18 +69,18 @@ int main()
    // Over Drives Xbox
    xenon_make_it_faster(XENON_SPEED_FULL);
 
-   xenon_sound_init();
    xenos_init(VIDEO_MODE_AUTO);
    console_init();
 
    usb_init();
    usb_do_poll();
+   
    do_asciiart();
 
    printf("\n");
    printf("press a to See temp\n");
    printf("\n");
-   printf("press b IS UNUSED RN\n");
+   printf("press b enable network use!\n");
    printf("\n");
    printf(" press x to close program\n");
    printf("\n");
@@ -100,8 +101,6 @@ int main()
    float CPU_TMP = 0, GPU_TMP = 0, MEM_TMP = 0, MOBO_TMP = 0;
    struct controller_data_s oldc;
    FILE *audio;
-
-
    while (1)
    {
 
@@ -125,8 +124,7 @@ int main()
          }
          else if ((c.b) && (!oldc.b))
          {
-            printf("\n");
-            printf("DOes nothing rn \n");
+            network_init();
          }
 
          else if ((c.x) && (!oldc.x))
