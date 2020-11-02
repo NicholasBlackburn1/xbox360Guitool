@@ -55,6 +55,13 @@ static volatile int thread_bufsize = 0;
 static int thread_bufmaxsize = 0;
 static volatile int thread_terminate = 0;
 
+
+static void extrnal_Storage_Setup(){
+   printf("Found Useable"+findDevices()+"Devices"));
+   printf("Mouting Devices!\n");
+   mount_all_devices();
+}
+
 static void inline play_buffer(void)
 {
 	int i;
@@ -239,6 +246,8 @@ int main()
    FILE *audio;
    
    audio= fopen("sda:/test.raw","wb");
+
+   
    while (1)
    {
 
