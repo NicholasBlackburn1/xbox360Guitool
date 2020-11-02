@@ -57,8 +57,7 @@ static volatile int thread_terminate = 0;
 
 
 static void extrnal_Storage_Setup(){
-   int device_list_size = findDevices();
-   printf("Found Devices!\n",device_list_size);
+   printf("Found Devices!\n");
    printf("Mouting Devices!\n");
    mount_all_devices();
 }
@@ -326,6 +325,11 @@ int main()
          {
             console_clrscr();
             console_set_colors(CONSOLE_COLOR_BLACK, CONSOLE_COLOR_YELLOW);
+            main();
+         }
+         else if((c.rb)&&(!oldc.rb)){
+            console_clrscr();
+           
             main();
          }
          oldc=c;

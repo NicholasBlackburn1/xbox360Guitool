@@ -6,27 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <debug.h>
+#include <libfat/fat.h>
+#include <libext2/ext2.h>
+#include <libntfs/ntfs.h>
 #include <sys/iosupport.h>
 #include <diskio/disc_io.h>
 #include <byteswap.h>
-
-#include "config.h"
-
-#ifdef FS_FAT 
-#include <libfat/fat.h>
-#endif
-#ifdef FS_EXT2FS
-#include <libext2/ext2.h>
-#endif
-#ifdef FS_NTFS
-#include <libntfs/ntfs.h>
-#endif
-#ifdef FS_XTAF
-#include <libxtaf/xtaf.h>
-#endif
-#ifdef FS_ISO9660
 #include <iso9660/iso9660.h>
-#endif
 
 extern DISC_INTERFACE xenon_atapi_ops;
 extern DISC_INTERFACE xenon_ata_ops;
@@ -164,7 +150,7 @@ enum {
 
 static char *prefix[] = {"uda", "udb", "udc", "sda", "dvd"};
 
-DEVICE_STRUCT part[sizeof(prefix)/sizeof(char *)][MAX_DEVICES];
+DEVICE_STRUCT part[2][MAX_DEVICES];
 
 static void AddPartition(sec_t sector, int device, int type, int *devnum) {
 	int i;
@@ -203,15 +189,11 @@ static void AddPartition(sec_t sector, int device, int type, int *devnum) {
 	char *name;
 
 	switch (type) {
-
-#ifdef FS_FAT
 		case T_FAT:
 			if (!fatMount(mount, disc, sector, 2, 64))
 				return;
 			fatGetVolumeLabel(mount, part[device][*devnum].name);
 			break;
-#endif
-#ifdef FS_NTFS
 		case T_NTFS:
 			if (!ntfsMount(mount, disc, sector, 2, 64, NTFS_DEFAULT | NTFS_RECOVER))
 				return;
@@ -223,8 +205,6 @@ static void AddPartition(sec_t sector, int device, int type, int *devnum) {
 			else
 				part[device][*devnum].name[0] = 0;
 			break;
-#endif
-#ifdef FS_EXT2FS
 		case T_EXT2:
 			if (!ext2Mount(mount, disc, sector, 2, 128, EXT2_FLAG_DEFAULT))
 				return;
@@ -236,8 +216,6 @@ static void AddPartition(sec_t sector, int device, int type, int *devnum) {
 			else
 				part[device][*devnum].name[0] = 0;
 			break;
-#endif
-#ifdef FS_ISO9660
 		case T_ISO9660:
 			if (!ISO9660_Mount(mount, disc))
 				return;
@@ -249,7 +227,6 @@ static void AddPartition(sec_t sector, int device, int type, int *devnum) {
 			else
 				strcpy(part[device][*devnum].name, "DVD");
 			break;
-#endif
 	}
 
 	int c = strlen(part[device][*devnum].name) - 1;
@@ -279,13 +256,8 @@ static int FindPartitions(int device) {
 
 	DISC_INTERFACE *interface;
 
-	switch(device){
-		case DEVICE_ATAPI:
-			interface = (DISC_INTERFACE *) & xenon_atapi_ops;
-		break;		
-		case DEVICE_ATA:
-		interface = (DISC_INTERFACE *) & xenon_ata_ops;
-		break;		
+	switch(device)
+	{
 		case DEVICE_USB_0:
 		interface = (DISC_INTERFACE *) & usb2mass_ops_0;
 		break;		
@@ -294,12 +266,17 @@ static int FindPartitions(int device) {
 		break;		
 		case DEVICE_USB_2:
 		interface = (DISC_INTERFACE *) & usb2mass_ops_2;
-		break;
+		break;		
+		case DEVICE_ATA:
+		interface = (DISC_INTERFACE *) & xenon_ata_ops;
+		break;		
+		case DEVICE_ATAPI:
+		interface = (DISC_INTERFACE *) & xenon_atapi_ops;
 		break;
 		default:
-			return -1;
+		return -1;	
 	}
-		 
+
 
 	MASTER_BOOT_RECORD mbr;
 	PARTITION_RECORD *partition = NULL;
@@ -465,7 +442,6 @@ static int FindPartitions(int device) {
 						}
 					}
 					break;
-				
 				}
 			}
 		}
@@ -497,38 +473,30 @@ static int FindPartitions(int device) {
 	return devnum;
 }
 
-/*
 static void UnmountPartitions(int device) {
 	char mount[11];
 	int i;
 	for (i = 0; i < MAX_DEVICES; i++) {
 		switch (part[device][i].type) {
-#ifdef FS_FAT
 			case T_FAT:
 				part[device][i].type = 0;
 				sprintf(mount, "%s:", part[device][i].mount);
 				fatUnmount(mount);
 				break;
-#endif
-#ifdef FS_NTFS
 			case T_NTFS:
 				part[device][i].type = 0;
 				ntfsUnmount(part[device][i].mount, false);
 				break;
-#endif
-#ifdef FS_EXT2FS
 			case T_EXT2:
 				part[device][i].type = 0;
 				ext2Unmount(part[device][i].mount);
 				break;
-#endif
-#ifdef FS_ISO9660
+
 			case T_ISO9660:
 				part[device][i].type = 0;
 				sprintf(mount, "%s:", part[device][i].mount);
 				ISO9660_Unmount(mount);
 				break;
-#endif
 		}
 		part[device][i].name[0] = 0;
 		part[device][i].mount[0] = 0;
@@ -536,8 +504,15 @@ static void UnmountPartitions(int device) {
 		part[device][i].interface = NULL;
 	}
 }
-*/
 
+
+extern int XTAFMount();
+
+/* void sleep(int i) {
+	delay(i);
+}
+*/
+//
 /**
  * Parse mbr for filesystem
  */
@@ -569,7 +544,7 @@ void mount_all_devices() {
 	FindPartitions(DEVICE_USB_1);
 	FindPartitions(DEVICE_USB_2);
 	mount_usb_device = mount_usb;
-	
+
 	if (hdd_dvd_mounted == 0) //Prevent mounting the DVD and HDD again...
 	{
 		if (xenon_atapi_ops.isInserted()) {
@@ -577,32 +552,10 @@ void mount_all_devices() {
 		}
 
 		if (xenon_ata_ops.isInserted()) {
-#ifdef FS_XTAF
-			if (XTAFMount() == 0)
-#endif
+			if (XTAFMount() == 0) {
 				FindPartitions(DEVICE_ATA);
+			}
 		}
 		hdd_dvd_mounted = 1; //Prevent mounting the DVD and HDD again...
 	}
-}
-
-
-char * root_dev = NULL;
-static int device_list_size = 0;
-char device_list[STD_MAX][10];
-
-int findDevices(){
-        int i;
-	for (i = 3; i < STD_MAX; i++) {
-		if (devoptab_list[i]->structSize) {
-			//strcpy(device_list[device_list_size],devoptab_list[i]->name);
-			sprintf(device_list[device_list_size], "%s:/", devoptab_list[i]->name);
-			printf("Found: %s\r\n", device_list[device_list_size]);
-			 
-			device_list_size++;
-		}
-	}
-
-	root_dev = device_list[0];
-	return device_list_size;
 }
