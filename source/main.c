@@ -56,6 +56,66 @@ static int thread_bufmaxsize = 0;
 static volatile int thread_terminate = 0;
 
 
+void dumpana() {
+	int i;
+	for (i = 0; i < 0x100; ++i)
+	{
+		uint32_t v;
+		xenon_smc_ana_read(i, &v);
+		printf("0x%08x, ", (unsigned int)v);
+		if ((i&0x7)==0x7)
+			printf(" // %02x\n", (unsigned int)(i &~0x7));
+	}
+}
+
+char FUSES[350]; /* this string stores the ascii dump of the fuses */
+
+unsigned char stacks[6][0x10000];
+
+void reset_timebase_task()
+{
+	mtspr(284,0); // TBLW
+	mtspr(285,0); // TBUW
+	mtspr(284,0);
+}
+
+void DumpFuses(){
+   printf(" * FUSES - write them down and keep them safe:\n");
+	char *fusestr = FUSES;
+	for (int i=0; i<12; ++i){
+		u64 line;
+		unsigned int hi,lo;
+
+		line=xenon_secotp_read_line(i);
+		hi=line>>32;
+		lo=line&0xffffffff;
+
+		fusestr += sprintf(fusestr, "fuseset %02d: %08x%08x\n", i, hi, lo);
+	}
+	printf(FUSES);
+
+	print_cpu_dvd_keys();
+	network_print_config();
+}
+
+void synchronize_timebases()
+{
+	xenon_thread_startup();
+	
+	std((void*)0x200611a0,0); // stop timebase
+	
+	int i;
+	for(i=1;i<6;++i){
+		xenon_run_thread_task(i,&stacks[i][0xff00],(void *)reset_timebase_task);
+		while(xenon_is_thread_task_running(i));
+	}
+	
+	reset_timebase_task(); // don't forget thread 0
+			
+	std((void*)0x200611a0,0x1ff); // restart timebase
+}
+	
+
 static void extrnal_Storage_Setup(){
    printf("Found Devices!\n");
    printf("Mouting Devices!\n");
@@ -239,6 +299,9 @@ int main()
    printf("\n");
    printf(" press dpad to switch text colors to red,green,blue, yellow\n");
    printf("\n");
+   printf("Press rb to dump nand!\n");
+   printf("\n");
+   printf("press lb to dump fuses!\n");
    unsigned int audiobuf[32];
    uint8_t buf[16];
    float CPU_TMP = 0, GPU_TMP = 0, MEM_TMP = 0, MOBO_TMP = 0;
@@ -329,7 +392,13 @@ int main()
          }
          else if((c.rb)&&(!oldc.rb)){
             console_clrscr();
-           
+            dumpana();
+            main();
+         }
+         else if((c.lb)&&(!oldc.lb)){
+            console_clrscr();
+            DumpFuses();
+            delay(5);
             main();
          }
          oldc=c;
